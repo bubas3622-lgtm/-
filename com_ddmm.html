@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🌍 Карта Президентов | Интерактивный атлас лидеров</title>
+
+<!-- D3.js библиотека -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+    }
+
+    body {
+        background: #020617;
+        overflow: hidden;
+        display: flex;
+        height: 100vh;
+        color: #f1f5f9;
+    }
+
+    /* ===== БОКОВАЯ ПАНЕЛЬ ===== */
+    #sidebar {
+        width: 340px;
+        background: linear-gradient(145deg, #0f172a 0%, #0a0f1c 100%);
+        border-right: 1px solid rgba(71, 85, 105, 0.6);
+        padding: 24px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+        box-shadow: 12px 0 32px rgba(0, 0, 0, 0.5);
+        z-index: 10;
+        overflow-y: auto;
+    }
+
+    #title {
+        font-size: 28px;
+        font-weight: 800;
+        background: linear-gradient(135deg, #60a5fa, #a855f7);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    #title::before {
+        content: "🗺️";
+        font-size: 32px;
+        background: none;
+        -webkit-background-clip: unset;
+        color: #60a5fa;
+    }
+
+    #countryName {
+        font-size: 22px;
+        font-weight: 600;
+        background: #1e293b;
+        padding: 16px 18px;
+        border-radius: 28px;
+        text-align: center;
+        border: 1px solid #334155;
+        word-break: break-word;
+        min-height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .upload-box {
+        border: 2px dashed #475569;
+        border-radius: 32px;
+        padding: 28px 16px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        background: rgba(17, 24, 39, 0.7);
+    }
+
+    .upload-box:hover {
+        border-color: #c084fc;
+        background: #1e293b;
+        transform: scale(1.01);
+        box-shadow: 0 0 15px rgba(96, 165, 250, 0.4);
+    }
+
+    .upload-icon {
+        font-size: 42px;
+    }
+
+    #presidentImage {
+        width: 100%;
+        max-height: 260px;
+        object-fit: cover;
+        border-radius: 28px;
+        display: none;
+        border: 3px solid rgba(255,255,255,0.9);
+        box-shadow: 0 20px 35px -12px black;
+        background: #0f172a;
+    }
+
+    .info {
+        background: rgba(30, 41, 59, 0.6);
+        padding: 18px;
+        border-radius: 24px;
+        font-size: 13px;
+        color: #cbd5e1;
+        text-align: center;
+        line-height: 1.5;
+    }
+
+    .reset-btn {
+        background: #334155;
+        border: none;
+        padding: 12px;
+        border-radius: 40px;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.2s;
+        margin-top: 10px;
+    }
+
+    .reset-btn:hover {
+        background: #ef4444;
+    }
+
+    /* ===== КАРТА ===== */
+    #map {
+        flex: 1;
+        position: relative;
+        background: #030712;
+    }
+
+    svg {
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at 20% 30%, #0a1628, #020617);
+    }
+
+    .country {
+        fill: #1e3a5f;
+        stroke: #0f172a;
+        stroke-width: 0.8;
+        transition: fill 0.2s ease;
+        cursor: pointer;
+    }
+
+    .country:hover {
+        fill: #3b82f6;
+        stroke: white;
+        stroke-width: 1.5;
+    }
+
+    .active {
+        fill: #2563eb !important;
+        stroke: white !important;
+        stroke-width: 2.5 !important;
+        filter: drop-shadow(0 0 8px #60a5fa);
+    }
+
+    .tooltip {
+        position: absolute;
+        background: #0f172ae6;
+        backdrop-filter: blur(12px);
+        color: #facc15;
+        padding: 6px 12px;
+        border-radius: 40px;
+        font-size: 13px;
+        font-weight: bold;
+        pointer-events: none;
+        z-index: 200;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px black;
+    }
+
+    @media (max-width: 680px) {
+        #sidebar {
+            width: 270px;
+            padding: 16px;
+        }
+        #countryName {
+            font-size: 18px;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div id="title">PRESIDENTS MAP</div>
+    
+    <div id="countryName">
+        🌍 Нажми на страну
+    </div>
+
+    <label class="upload-box" id="dropArea">
+        <span class="upload-icon">📸➕</span>
+        <span>Загрузить фото президента</span>
+        <span style="font-size:12px; opacity:0.7;">Нажми или перетащи изображение</span>
+        <input type="file" id="fileInput" hidden accept="image/jpeg,image/png,image/webp,image/gif">
+    </label>
+
+    <div style="border-radius: 28px; background: #02061740; padding: 4px;">
+        <img id="presidentImage" alt="Фото президента">
+    </div>
+
+    <div class="info">
+        🧑‍💼 Выберите страну → назначьте фото президента<br>
+        💾 Все фото сохраняются локально<br>
+        ✨ Нажмите на любую страну на карте
+    </div>
+    
+    <button id="resetLocalBtn" class="reset-btn">🗑 Сбросить все фото</button>
+</div>
+
+<div id="map"></div>
+
+<script>
+    (function() {
+        // Получаем размеры
+        const sidebarWidth = 340;
+        let width = window.innerWidth - sidebarWidth;
+        let height = window.innerHeight;
+        
+        // Создаем SVG
+        const svg = d3.select("#map")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+        
+        // Группа для карты
+        let g = svg.append("g");
+        
+        // Настройка проекции (исправлено для видимости мира)
+        const projection = d3.geoMercator()
+            .scale(100)
+            .center([0, 20])
+            .translate([width / 2, height / 2]);
+        
+        const pathGenerator = d3.geoPath().projection(projection);
+        
+        // DOM элементы
+        const countryTitleEl = document.getElementById("countryName");
+        const presidentImg = document.getElementById("presidentImage");
+        const fileInput = document.getElementById("fileInput");
+        const dropArea = document.getElementById("dropArea");
+        const resetBtn = document.getElementById("resetLocalBtn");
+        
+        // Хранилище фото
+        let presidentsStore = {};
+        let currentCountry = null;
+        
+        // Загрузка из localStorage
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem("world_presidents_map");
+            if (saved) {
+                try {
+                    presidentsStore = JSON.parse(saved);
+                    if (currentCountry && presidentsStore[currentCountry]) {
+                        presidentImg.src = presidentsStore[currentCountry];
+                        presidentImg.style.display = "block";
+                    }
+                } catch(e) { console.warn(e); }
+            }
+        }
+        
+        // Сохранение в localStorage
+        function saveToLocalStorage() {
+            localStorage.setItem("world_presidents_map", JSON.stringify(presidentsStore));
+        }
+        
+        // Обновить отображение фото
+        function updatePresidentPhotoDisplay() {
+            if (currentCountry && presidentsStore[currentCountry]) {
+                presidentImg.src = presidentsStore[currentCountry];
+                presidentImg.style.display = "block";
+            } else {
+                presidentImg.style.display = "none";
+            }
+        }
+        
+        // Установить активную страну
+        function setActiveCountry(countryName, element) {
+            svg.selectAll(".country").classed("active", false);
+            if (element) {
+                element.classed("active", true);
+            }
+            currentCountry = countryName;
+            countryTitleEl.innerHTML = `🏛 ${countryName}`;
+            updatePresidentPhotoDisplay();
+        }
+        
+        // Назначить фото стране
+        function assignPhotoToCountry(file) {
+            if (!currentCountry) {
+                alert("⚠️ Сначала выберите страну на карте!");
+                return false;
+            }
+            if (!file || !file.type.startsWith('image/')) {
+                alert("Пожалуйста, выберите изображение.");
+                return false;
+            }
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                presidentsStore[currentCountry] = evt.target.result;
+                saveToLocalStorage();
+                presidentImg.src = evt.target.result;
+                presidentImg.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+            return true;
+        }
+        
+        // Создаем тултип
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+        
+        // Более надежный URL для GeoJSON (проверенный рабочий источник)
+        const geoJsonUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json";
+        
+        // Загружаем и рисуем карту
+        d3.json(geoJsonUrl).then(function(worldData) {
+            // Конвертируем topojson в geojson
+            const countries = topojson.feature(worldData, worldData.objects.countries);
+            
+            // Рисуем все страны
+            g.selectAll("path")
+                .data(countries.features)
+                .enter()
+                .append("path")
+                .attr("d", d => pathGenerator(d))
+                .attr("class", "country")
+                .attr("data-country-name", d => d.properties.name)
+                .on("click", function(event, feature) {
+                    event.stopPropagation();
+                    const countryName = feature.properties.name || "Неизвестная страна";
+                    const currentPath = d3.select(this);
+                    setActiveCountry(countryName, currentPath);
+                    
+                    // Показываем тултип
+                    tooltip.transition().duration(150).style("opacity", 0.9);
+                    tooltip.html(`📍 ${countryName}`)
+                        .style("left", (event.pageX + 12) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                    tooltip.transition().delay(800).style("opacity", 0);
+                })
+                .on("mouseover", function(event, feature) {
+                    const cName = feature.properties.name || "Страна";
+                    tooltip.transition().duration(120).style("opacity", 0.85);
+                    tooltip.html(`✨ ${cName}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 30) + "px");
+                    d3.select(this).attr("stroke", "#facc15").attr("stroke-width", 1.5);
+                })
+                .on("mouseout", function() {
+                    tooltip.transition().duration(300).style("opacity", 0);
+                    d3.select(this).attr("stroke", "#0f172a").attr("stroke-width", 0.8);
+                });
+            
+            // Добавляем возможность зума
+            const zoomBehavior = d3.zoom()
+                .scaleExtent([0.8, 6])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                });
+            svg.call(zoomBehavior);
+            
+            console.log("Карта успешно загружена!");
+            
+        }).catch(error => {
+            console.error("Ошибка загрузки карты:", error);
+            countryTitleEl.innerHTML = "⚠️ Ошибка загрузки карты";
+            countryTitleEl.style.background = "#ef444420";
+            
+            // Показываем сообщение об ошибке на карте
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height / 2)
+                .attr("text-anchor", "middle")
+                .attr("fill", "#ef4444")
+                .attr("font-size", "20px")
+                .text("⚠️ Не удалось загрузить карту. Проверьте соединение.");
+        });
+        
+        // Обработчики загрузки фото
+        fileInput.addEventListener("change", function(e) {
+            if (e.target.files && e.target.files[0]) {
+                assignPhotoToCountry(e.target.files[0]);
+                fileInput.value = '';
+            }
+        });
+        
+        dropArea.addEventListener("click", (e) => {
+            if (!currentCountry) {
+                alert("🎯 Сначала выберите страну на карте!");
+                return;
+            }
+            fileInput.click();
+        });
+        
+        // Drag & Drop
+        dropArea.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = "#a855f7";
+            dropArea.style.backgroundColor = "#2d3a5e";
+        });
+        
+        dropArea.addEventListener("dragleave", (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = "#475569";
+            dropArea.style.backgroundColor = "rgba(17, 24, 39, 0.7)";
+        });
+        
+        dropArea.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = "#475569";
+            dropArea.style.backgroundColor = "rgba(17, 24, 39, 0.7)";
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                if (!currentCountry) {
+                    alert("🔔 Выберите страну на карте!");
+                    return;
+                }
+                assignPhotoToCountry(file);
+            } else {
+                alert("Перетащите изображение (jpg, png, webp)");
+            }
+        });
+        
+        // Кнопка сброса
+        resetBtn.addEventListener("click", () => {
+            if (confirm("Сбросить все фото президентов?")) {
+                presidentsStore = {};
+                saveToLocalStorage();
+                presidentImg.style.display = "none";
+                alert("✅ Все фото удалены.");
+            }
+        });
+        
+        // Обработка изменения размера окна
+        window.addEventListener("resize", () => {
+            const newWidth = window.innerWidth - sidebarWidth;
+            const newHeight = window.innerHeight;
+            if (newWidth > 0 && newHeight > 0) {
+                width = newWidth;
+                height = newHeight;
+                svg.attr("width", width).attr("height", height);
+                projection.translate([width / 2, height / 2]);
+                g.selectAll(".country").attr("d", d => pathGenerator(d));
+            }
+        });
+        
+        // Загружаем сохраненные фото
+        loadFromLocalStorage();
+        
+        // Подсказка при первом запуске
+        if (!localStorage.getItem("hint_shown_map")) {
+            setTimeout(() => {
+                const hint = d3.select("body").append("div")
+                    .attr("class", "tooltip")
+                    .style("opacity", 0)
+                    .html("💡 Кликните на любую страну, чтобы выбрать её!");
+                hint.style("left", "380px").style("top", "150px").style("background", "#1e293b");
+                hint.transition().duration(400).style("opacity", 1);
+                setTimeout(() => {
+                    hint.transition().duration(800).style("opacity", 0).remove();
+                }, 4000);
+                localStorage.setItem("hint_shown_map", "true");
+            }, 1000);
+        }
+    })();
+</script>
+
+<!-- Подключаем topojson для конвертации -->
+<script src="https://cdn.jsdelivr.net/npm/topojson@3.0.2/dist/topojson.min.js"></script>
+
+</body>
+</html>
